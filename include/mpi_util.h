@@ -42,10 +42,23 @@ SPECIALIZE_MPI_TYPE(int64_t, MPI_INT64_T);
 SPECIALIZE_MPI_TYPE(float,  MPI_FLOAT);
 SPECIALIZE_MPI_TYPE(double, MPI_DOUBLE);
 
-// additional common aliases used in the codebase
-// size_t maps to MPI_UNSIGNED_LONG on typical Unix systems
-SPECIALIZE_MPI_TYPE(size_t, MPI_UNSIGNED_LONG);
-// Cluster is typedef'd to long on some platforms; map to MPI_LONG
-SPECIALIZE_MPI_TYPE(long, MPI_LONG);
+// NOTE: do not add additional SPECIALIZE_MPI_TYPE entries for aliases like
+// `size_t` or `long` here. On some platforms (LP64) the fixed-width typedefs
+// such as uint64_t / int64_t are aliases of `unsigned long` / `long` and
+// adding additional specializations causes duplicate-definition errors.
+// If a mapping for `size_t` or `long` is needed, prefer a platform-aware
+// fallback or conditional mapping elsewhere.
+
+// Portable helper returning an MPI_Datatype for size_t.
+// Avoids template specialization collisions on LP64 platforms.
+inline MPI_Datatype MPI_Type_for_size_t() {
+#if SIZE_MAX == UINT64_MAX
+    return MPI_UNSIGNED_LONG;
+#elif SIZE_MAX == UINT32_MAX
+    return MPI_UNSIGNED;
+#else
+#error "Unsupported size_t width for MPI mapping"
+#endif
+}
 
 #endif // MPI_UTIL_H

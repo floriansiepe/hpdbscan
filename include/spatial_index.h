@@ -829,11 +829,11 @@ public:
             point_buffer, recv_counts_points.data(), recv_displs_points.data(), MPI_Types<T>::map(), MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            m_initial_order.data(), send_counts.data(), send_displs.data(), MPI_Types<size_t>::map(),
+            m_initial_order.data(), send_counts.data(), send_displs.data(), MPI_Type_for_size_t(),
             order_buffer.data(), recv_counts.data(), recv_displs.data(), MPI_LONG, MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            clusters.data(), send_counts.data(), send_displs.data(), MPI_Types<size_t>::map(),
+            clusters.data(), send_counts.data(), send_displs.data(), MPI_Type_for_size_t(),
             cluster_buffer.data(), recv_counts.data(), recv_displs.data(), MPI_LONG, MPI_COMM_WORLD
         );
 
