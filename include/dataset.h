@@ -15,7 +15,9 @@
 #define DATASET_H
 
 #include <algorithm>
-#include <hdf5.h>
+#include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #ifdef WITH_MPI
 #include <mpi.h>
 #endif
@@ -23,26 +25,37 @@
 #include "constants.h"
 
 struct Dataset {
-    hsize_t m_shape[2];
-    hsize_t m_chunk[2];
-    hsize_t m_offset[2] = {0, 0};
-    hid_t m_type;
+    // shape: number of rows and columns (features)
+    size_t m_shape[2];
+    // chunk describes the local chunk size per process (rows, cols)
+    size_t m_chunk[2];
+    // offset of this chunk inside the global dataset
+    size_t m_offset[2] = {0, 0};
+    // size in bytes of a single element
+    size_t m_element_size;
+    // raw pointer to the data buffer
     void* m_p;
 
-    Dataset(const hsize_t shape[2], hid_t type) {
-        std::copy(shape, shape + 2, m_shape);
-        std::copy(shape, shape + 2, m_chunk);
+    // construct an empty dataset given shape and element size
+    Dataset(const size_t shape[2], size_t element_size) {
+        m_shape[0] = shape[0];
+        m_shape[1] = shape[1];
+        m_chunk[0] = m_shape[0];
+        m_chunk[1] = m_shape[1];
 
-        m_type = H5Tcopy(type);
-        m_p = malloc(shape[0] * shape[1] * H5Tget_precision(type) / BITS_PER_BYTE);
+        m_element_size = element_size;
+        m_p = malloc(m_shape[0] * m_shape[1] * m_element_size);
+        if (!m_p) throw std::bad_alloc();
     }
 
+    // construct from typed data (copies into internal buffer)
     template <typename T>
-    Dataset(T* data, const hsize_t shape[2], hid_t type) : Dataset(shape, type) {
-        std::copy(data, data + shape[0] * shape[1], static_cast<T*>(m_p));
+    Dataset(T* data, const size_t shape[2], size_t element_size) : Dataset(shape, element_size) {
+        size_t total = static_cast<size_t>(shape[0]) * static_cast<size_t>(shape[1]);
+        std::copy(data, data + total, static_cast<T*>(m_p));
 
         #ifdef WITH_MPI
-        // determine the global shape...
+        // determine the global shape (sum over first dimension)
         MPI_Allreduce(MPI_IN_PLACE, m_shape, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
         // ... and the chunk offset
         int rank;
@@ -53,7 +66,6 @@ struct Dataset {
     }
 
     ~Dataset() {
-        H5Tclose(m_type);
         free(m_p);
     }
 };

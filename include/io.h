@@ -17,7 +17,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <hdf5.h>
+#include <cstddef>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -32,168 +34,121 @@
 
 class IO {
 public:
-    static Dataset read_hdf5(const std::string& path, const std::string& dataset_name) {
-        #ifdef WITH_MPI
-        int rank, size;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &size);
-        #endif
+    // HDF5 handling removed; use read_csv instead
 
-        // disable libhdf5 error printing
-        herr_t (*old_func)(hid_t, void*);
-        void* old_client_data;
-
-        H5Eget_auto(H5E_DEFAULT, &old_func, &old_client_data);
-        H5Eset_auto(H5E_DEFAULT, nullptr, nullptr);
-
-        // open the file
-        hid_t file_handle = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-        if (file_handle < 0) {
+    // Read a CSV file where each row is a point and columns are features.
+    // The CSV parser expects numeric values separated by commas. Missing values or
+    // non-numeric entries will throw a runtime_error.
+    static Dataset read_csv(const std::string& path) {
+        std::ifstream in(path);
+        if (!in.is_open()) {
             throw std::invalid_argument("Could not open " + path);
         }
 
-        // retrieve the dataset
-        hid_t dataset_handle = H5Dopen1(file_handle, dataset_name.c_str());
-        if (dataset_handle < 0) {
-            throw std::invalid_argument("Could not open dataset " + dataset_name);
+        std::string line;
+        std::vector<double> values;
+        size_t rows = 0;
+        size_t cols = 0;
+
+        // read file line by line
+        while (std::getline(in, line)) {
+            if (line.empty()) continue;
+            std::istringstream ss(line);
+            std::string token;
+            size_t current_cols = 0;
+            while (std::getline(ss, token, ',')) {
+                // trim whitespace
+                size_t start = token.find_first_not_of(" \t\r\n");
+                size_t end = token.find_last_not_of(" \t\r\n");
+                if (start == std::string::npos) token = "";
+                else token = token.substr(start, end - start + 1);
+
+                if (token.empty()) {
+                    throw std::runtime_error("Empty field in CSV is not supported");
+                }
+
+                char* endptr = nullptr;
+                double v = std::strtod(token.c_str(), &endptr);
+                if (endptr == token.c_str() || *endptr != '\0') {
+                    throw std::runtime_error("Non-numeric value in CSV: " + token);
+                }
+                values.push_back(v);
+                ++current_cols;
+            }
+            if (cols == 0) cols = current_cols;
+            else if (current_cols != cols) {
+                throw std::runtime_error("Inconsistent number of columns in CSV");
+            }
+            ++rows;
         }
 
-        // retrieve the data
-        hid_t type_handle = H5Dget_type(dataset_handle);
-        if (type_handle < 0) {
-            throw std::runtime_error("Could not retrieve dataset type");
+        if (rows == 0 || cols == 0) {
+            throw std::runtime_error("CSV file seems empty or malformed");
         }
 
-        // get space extent
-        hid_t space_handle = H5Dget_space(dataset_handle);
-        if (space_handle < 0) {
-            throw std::runtime_error("Could not retrieve dataspace extent, file seems to be corrupted");
-        }
-        bool is_matrix = H5Sget_simple_extent_ndims(space_handle) == 2;
-        if (not is_matrix) {
-            throw std::invalid_argument("Data in dataset " + dataset_name + " should be a matrix");
-        }
+    size_t shape[2];
+    shape[0] = static_cast<size_t>(rows);
+    shape[1] = static_cast<size_t>(cols);
 
-        // retrieve dataset extents
-        hsize_t extents[2];
-        if (H5Sget_simple_extent_dims(space_handle, extents, nullptr) < 0) {
-            throw std::runtime_error("Could not retrieve dataset extents, file seems to be corrupted");
-        }
+    // create a Dataset and copy the values into it (double precision)
+    Dataset dataset(shape, sizeof(double));
+        double* target = static_cast<double*>(dataset.m_p);
+        std::copy(values.begin(), values.end(), target);
 
-        // initialize the Dataset object
-        Dataset dataset(extents, type_handle);
-
-        // calculate the offsets for MPI mode
         #ifdef WITH_MPI
-        hsize_t remainder = extents[0] % size;
-        dataset.m_chunk[0] /= size;
-        if (remainder > static_cast<hsize_t>(rank)) {
-            ++dataset.m_chunk[0];
-            dataset.m_offset[0] = dataset.m_chunk[0] * rank;
-        } else {
-            dataset.m_offset[0] = dataset.m_chunk[0] * rank + remainder;
+        // In MPI mode, scatter rows across ranks so each process has its chunk
+        int rank, size;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+        // compute local chunk sizes
+        size_t base = rows / static_cast<size_t>(size);
+        size_t rem = rows % static_cast<size_t>(size);
+        size_t local_rows = base + (static_cast<size_t>(rank) < rem ? 1 : 0);
+
+        // build receive buffer for local_rows * cols
+        double* local_buf = static_cast<double*>(malloc(local_rows * cols * sizeof(double)));
+        if (!local_buf) throw std::bad_alloc();
+
+        // prepare sendcounts/displs in terms of doubles
+        std::vector<int> sendcounts(size);
+        std::vector<int> displs(size);
+        size_t offset = 0;
+        for (int r = 0; r < size; ++r) {
+            size_t rrows = base + (static_cast<size_t>(r) < rem ? 1 : 0);
+            sendcounts[r] = static_cast<int>(rrows * cols);
+            displs[r] = static_cast<int>(offset * cols);
+            offset += rrows;
         }
+
+        MPI_Scatterv(values.data(), sendcounts.data(), displs.data(), MPI_DOUBLE,
+                     local_buf, static_cast<int>(local_rows * cols), MPI_DOUBLE,
+                     0, MPI_COMM_WORLD);
+
+        // replace dataset buffer with local buffer and set chunk/offset
+        free(dataset.m_p);
+        dataset.m_p = local_buf;
+        dataset.m_chunk[0] = local_rows;
+        dataset.m_chunk[1] = cols;
+        dataset.m_offset[0] = 0; // handled by Dataset constructor flow if needed
+        #else
+        // single process: chunk == shape
+        dataset.m_chunk[0] = static_cast<size_t>(shape[0]);
+        dataset.m_chunk[1] = static_cast<size_t>(shape[1]);
         #endif
 
-        // create the hyperslab
-        hid_t hyperslab = H5Screate_simple(sizeof(extents) / BITS_PER_BYTE, dataset.m_chunk, nullptr);
-        H5Sselect_hyperslab(space_handle, H5S_SELECT_SET, dataset.m_offset, nullptr, dataset.m_chunk, nullptr);
-
-        // actually read in the data
-        hid_t native_type = H5Tget_native_type(type_handle, H5T_DIR_DEFAULT);
-        if (native_type < 0) {
-            std::invalid_argument("Could not infer matching native data type from dataset data type");
-        }
-        if (H5Dread(dataset_handle, native_type, hyperslab, space_handle, H5P_DEFAULT, dataset.m_p) < 0) {
-            throw std::runtime_error("Failed to read data");
-        }
-
-        // restore libhdf5 error printing - everything below is critical, hdf5 should do the diagnostics
-        H5Eset_auto(H5E_DEFAULT, old_func, old_client_data);
-
-        // release the handles
-        H5Tclose(native_type);
-        H5Sclose(hyperslab);
-        H5Sclose(space_handle);
-        H5Tclose(type_handle);
-        H5Dclose(dataset_handle);
-        H5Fclose(file_handle);
-
-        // return the resulting dataset
         return dataset;
     }
 
-    static void write_hdf5(const std::string& path, const std::string& dataset_name, Clusters& clusters) {
-        #ifdef WITH_MPI
-        int rank, size;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &size);
-        #endif
-
-        // disable libhdf5 error printing
-        herr_t (*old_func)(hid_t, void*);
-        void* old_client_data;
-
-        H5Eget_auto(H5E_DEFAULT, &old_func, &old_client_data);
-        H5Eset_auto(H5E_DEFAULT, nullptr, nullptr);
-
-        hsize_t total_count = clusters.size();
-        hsize_t chunk_size = total_count;
-        hsize_t offset = 0;
-
-        #ifdef WITH_MPI
-        MPI_Allreduce(MPI_IN_PLACE, &total_count, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
-        chunk_size = total_count / size;
-        hsize_t remainder = total_count % size;
-        if (remainder > static_cast<hsize_t>(rank)) {
-            ++chunk_size;
-            offset = chunk_size * rank;
-        } else {
-            offset = chunk_size * rank + remainder;
-        }
-        #endif
-
-        // make sure the file exists
-        H5Fcreate(path.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
-        // attempt to open the file
-        hid_t file_handle = H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-        if (file_handle < 0) {
+    static void write_csv(const std::string& path, Clusters& clusters) {
+        std::ofstream out(path);
+        if (!out.is_open()) {
             throw std::invalid_argument("Could not open " + path);
         }
-
-        // create the dataset
-        hid_t data_space = H5Screate_simple(1, &total_count, nullptr);
-        H5Dcreate1(file_handle, dataset_name.c_str(), H5T_NATIVE_LONG, data_space, H5P_DEFAULT);
-
-        // ... dataset already exists, previous call fails, just open the existing one
-        hid_t dataset_handle = H5Dopen1(file_handle, dataset_name.c_str());
-        if (dataset_handle < 0) {
-            throw std::invalid_argument("Could not open dataset " + dataset_name);
+        // write one cluster label per line
+        for (size_t i = 0; i < clusters.size(); ++i) {
+            out << clusters[i] << '\n';
         }
-
-        // get dataset space extent
-        hid_t hyperslab = H5Screate_simple(1, &chunk_size, nullptr);
-        hid_t space_handle = H5Dget_space(dataset_handle);
-        if (space_handle < 0) {
-            throw std::runtime_error("Could not retrieve dataspace extent, file seems to be corrupted");
-        }
-        // select the partial chunk (aka hyperslab) inside the data space
-        H5Sselect_hyperslab(space_handle, H5S_SELECT_SET, &offset, nullptr, &chunk_size, nullptr);
-
-        // write the data to disk
-        if (H5Dwrite(dataset_handle, H5T_NATIVE_LONG, hyperslab, space_handle, H5P_DEFAULT, clusters.data()) < 0) {
-            throw std::runtime_error("Failed to write data, target data set is probably of wrong size or type");
-        }
-
-        // clean up the handles
-        H5Sclose(space_handle);
-        H5Sclose(hyperslab);
-        H5Dclose(dataset_handle);
-        H5Sclose(data_space);
-        H5Fclose(file_handle);
-
-        // restore libhdf5 error printing - everything below is critical, hdf5 should do the diagnostics
-        H5Eset_auto(H5E_DEFAULT, old_func, old_client_data);
     }
 };
 

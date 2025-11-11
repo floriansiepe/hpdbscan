@@ -18,11 +18,10 @@
 #include <atomic>
 #include <cmath>
 #include <functional>
-#include <hdf5.h>
+#include <cstddef>
 #include <limits>
 #include <numeric>
 #include <omp.h>
-#include <parallel/algorithm>
 #include <vector>
 
 #ifdef WITH_OUTPUT
@@ -182,8 +181,8 @@ private:
     }
 
     void sort_by_cell() {
-        const hsize_t items = m_data.m_chunk[0];
-        const hsize_t dimensions = m_data.m_chunk[1];
+    const size_t items = m_data.m_chunk[0];
+    const size_t dimensions = m_data.m_chunk[1];
 
         // initialize out-of-place buffers
         Cells reordered_cells(items);
@@ -218,17 +217,17 @@ private:
     #ifdef WITH_MPI
     CellHistogram compute_global_histogram() {
         // fetch cell histograms across all nodes
-        int send_counts[m_size];
-        int send_displs[m_size];
-        int recv_counts[m_size];
-        int recv_displs[m_size];
+            std::vector<int> send_counts(m_size);
+            std::vector<int> send_displs(m_size);
+            std::vector<int> recv_counts(m_size);
+            std::vector<int> recv_displs(m_size);
 
         // determine the number of entries in each process' histogram
         for (int i = 0; i < m_size; ++i) {
             send_counts[i] = m_cell_histogram.size() * 2;
             send_displs[i] = 0;
         }
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+            MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
         // ... based on this information we can calculate the displacements into the buffer
         size_t entries_count = 0;
@@ -238,7 +237,7 @@ private:
         }
 
         // serialize the local histogram into a flat buffer
-        std::vector<size_t> send_buffer(m_cell_histogram.size() * 2);
+            std::vector<size_t> send_buffer(m_cell_histogram.size() * 2);
         size_t send_buffer_index = 0;
         for (const auto& item : m_cell_histogram) {
             send_buffer[send_buffer_index++] = item.first;
@@ -246,11 +245,11 @@ private:
         }
 
         // exchange the histograms
-        std::vector<size_t> recv_buffer(entries_count);
-        MPI_Alltoallv(
-            send_buffer.data(), send_counts, send_displs, MPI_UNSIGNED_LONG,
-            recv_buffer.data(), recv_counts, recv_displs, MPI_UNSIGNED_LONG, MPI_COMM_WORLD
-        );
+            std::vector<size_t> recv_buffer(entries_count);
+            MPI_Alltoallv(
+                send_buffer.data(), send_counts.data(), send_displs.data(), MPI_UNSIGNED_LONG,
+                recv_buffer.data(), recv_counts.data(), recv_displs.data(), MPI_UNSIGNED_LONG, MPI_COMM_WORLD
+            );
 
         // sum-up the entries into a global histogram
         CellHistogram global_histogram;
@@ -265,7 +264,7 @@ private:
     }
 
     size_t compute_score(const Cell cell_id, const CellHistogram& cell_histogram) {
-        const hsize_t dimensions = m_data.m_chunk[1];
+    const size_t dimensions = m_data.m_chunk[1];
 
         // allocate buffer for the dimensions steps
         Cells neighboring_cells;
@@ -385,10 +384,10 @@ private:
         const size_t dimensions = m_data.m_chunk[1];
 
         // calculate the send number of points to be transmitted to each rank
-        int send_counts[m_size];
-        int send_displs[m_size];
-        int recv_counts[m_size];
-        int recv_displs[m_size];
+            std::vector<int> send_counts(m_size);
+            std::vector<int> send_displs(m_size);
+            std::vector<int> recv_counts(m_size);
+            std::vector<int> recv_displs(m_size);
 
         for (int i = 0; i < m_size; ++i) {
             const auto& bound = m_cell_bounds[i];
@@ -400,17 +399,17 @@ private:
         }
 
         // exchange how much data we send/receive to and from each rank
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+            MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
         for (int i = 0; i < m_size; ++i) {
             recv_displs[i] = (i == 0) ? 0 : (recv_displs[i - 1] + recv_counts[i - 1]);
         }
 
         // calculate the corresponding send and receive counts for the label/order vectors
         size_t total_recv_items = 0;
-        int send_counts_labels[m_size];
-        int send_displs_labels[m_size];
-        int recv_counts_labels[m_size];
-        int recv_displs_labels[m_size];
+        std::vector<int> send_counts_labels(m_size);
+        std::vector<int> send_displs_labels(m_size);
+        std::vector<int> recv_counts_labels(m_size);
+        std::vector<int> recv_displs_labels(m_size);
 
         for (int i = 0; i < m_size; ++i) {
             total_recv_items += recv_counts[i];
@@ -425,13 +424,13 @@ private:
         std::vector<size_t> order_buffer(total_recv_items / dimensions);
 
         // actually transmit the data
+            MPI_Alltoallv(
+                static_cast<T*>(m_data.m_p), send_counts.data(), send_displs.data(), MPI_Types<T>::map(),
+                point_buffer, recv_counts.data(), recv_displs.data(), MPI_Types<T>::map(), MPI_COMM_WORLD
+            );
         MPI_Alltoallv(
-            static_cast<T*>(m_data.m_p), send_counts, send_displs, MPI_Types<T>::map(),
-            point_buffer, recv_counts, recv_displs, MPI_Types<T>::map(), MPI_COMM_WORLD
-        );
-        MPI_Alltoallv(
-            m_initial_order.data(), send_counts_labels, send_displs_labels, MPI_UNSIGNED_LONG,
-            order_buffer.data(), recv_counts_labels, recv_displs_labels, MPI_UNSIGNED_LONG, MPI_COMM_WORLD
+            m_initial_order.data(), send_counts_labels.data(), send_displs_labels.data(), MPI_UNSIGNED_LONG,
+            order_buffer.data(), recv_counts_labels.data(), recv_displs_labels.data(), MPI_UNSIGNED_LONG, MPI_COMM_WORLD
         );
 
         // clean up the previous data
@@ -440,7 +439,7 @@ private:
         m_cell_index.clear();
 
         // assign the new data
-        const hsize_t new_item_count = total_recv_items / dimensions;
+    const size_t new_item_count = total_recv_items / dimensions;
         m_data.m_chunk[0] = new_item_count;
         m_cells.resize(new_item_count);
         m_data.m_p = point_buffer;
@@ -482,7 +481,7 @@ private:
         }
 
         // actually reorder the points out-of-place
-        const hsize_t dimensions = m_data.m_chunk[1];
+    const size_t dimensions = m_data.m_chunk[1];
         Clusters cluster_buffer(items);
         std::vector<size_t> order_buffer(items);
         T* point_buffer = new T[items * dimensions];
@@ -680,7 +679,7 @@ public:
     }
 
     std::vector<size_t> get_neighbors(const Cell cell) const {
-        const hsize_t dimensions = m_data.m_chunk[1];
+    const size_t dimensions = m_data.m_chunk[1];
 
         // allocate some space for the neighboring cells, be pessimistic and reserve 3^dims for possibly all neighbors
         Cells neighboring_cells;
@@ -768,16 +767,16 @@ public:
     }
 
     void recover_initial_order(Clusters& clusters) {
-        const hsize_t dimensions = m_data.m_chunk[1];
+    const size_t dimensions = m_data.m_chunk[1];
 
         #ifdef WITH_MPI
         sort_by_order(clusters);
 
-        // allocate buffers to do an inverse exchange
-        int send_counts[m_size];
-        int send_displs[m_size];
-        int recv_counts[m_size];
-        int recv_displs[m_size];
+    // allocate buffers to do an inverse exchange
+    std::vector<int> send_counts(m_size);
+    std::vector<int> send_displs(m_size);
+    std::vector<int> recv_counts(m_size);
+    std::vector<int> recv_displs(m_size);
 
         const size_t lower_bound = lower_halo_bound();
         const size_t upper_bound = upper_halo_bound();
@@ -799,17 +798,17 @@ public:
         }
 
         // exchange the resulting item counts and displacements to get the incoming items for this rank
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
         for (int i = 0; i < m_size; ++i) {
             recv_displs[i] = (i == 0) ? 0 : recv_displs[i - 1] + recv_counts[i - 1];
         }
 
         // redistribute the dataset to their original owner ranks
         size_t total_recv_items = 0;
-        int send_counts_points[m_size];
-        int send_displs_points[m_size];
-        int recv_counts_points[m_size];
-        int recv_displs_points[m_size];
+        std::vector<int> send_counts_points(m_size);
+        std::vector<int> send_displs_points(m_size);
+        std::vector<int> recv_counts_points(m_size);
+        std::vector<int> recv_displs_points(m_size);
 
         for (int i = 0; i < m_size; ++i) {
             total_recv_items += recv_counts[i];
@@ -826,16 +825,16 @@ public:
 
         // actually transmit the data
         MPI_Alltoallv(
-            static_cast<T*>(m_data.m_p), send_counts_points, send_displs_points, MPI_Types<T>::map(),
-            point_buffer, recv_counts_points, recv_displs_points, MPI_Types<T>::map(), MPI_COMM_WORLD
+            static_cast<T*>(m_data.m_p), send_counts_points.data(), send_displs_points.data(), MPI_Types<T>::map(),
+            point_buffer, recv_counts_points.data(), recv_displs_points.data(), MPI_Types<T>::map(), MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            m_initial_order.data(), send_counts, send_displs, MPI_Types<size_t>::map(),
-            order_buffer.data(), recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            m_initial_order.data(), send_counts.data(), send_displs.data(), MPI_Types<size_t>::map(),
+            order_buffer.data(), recv_counts.data(), recv_displs.data(), MPI_LONG, MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_Types<size_t>::map(),
-            cluster_buffer.data(), recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            clusters.data(), send_counts.data(), send_displs.data(), MPI_Types<size_t>::map(),
+            cluster_buffer.data(), recv_counts.data(), recv_displs.data(), MPI_LONG, MPI_COMM_WORLD
         );
 
         // assign the new data

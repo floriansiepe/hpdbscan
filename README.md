@@ -23,6 +23,11 @@ HPDBSCAN follows the standard CMake project conventions. Create a build director
 mkdir build && cd build && cmake .. && make
 ```
 
+On a Mac
+```bash
+cmake -S . -B build -D CMAKE_C_COMPILER=/opt/homebrew/bin/gcc-15 -D CMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-15 && cmake --build build -- -j 4
+```
+
 The provided CMake script checks, but does not install, all of the necessary dependencies listed above. If no MPI installation is present on the system, an OpenMP-only (i.e. thread-based) version is built.
 
 ## Usage

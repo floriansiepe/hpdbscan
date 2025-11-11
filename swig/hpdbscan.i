@@ -29,7 +29,7 @@ namespace std {
 class HPDBSCAN {
 public:
     HPDBSCAN(float epsilon, size_t min_points) throw(std::invalid_argument);
-    std::vector<ptrdiff_t> cluster(const std::string& path, const std::string& dataset) throw(std::invalid_argument, std::runtime_error);
-    std::vector<ptrdiff_t> cluster(const std::string& path, const std::string& dataset, int threads) throw(std::invalid_argument, std::runtime_error);
+    std::vector<ptrdiff_t> cluster(const std::string& path) throw(std::invalid_argument, std::runtime_error);
+    std::vector<ptrdiff_t> cluster(const std::string& path, int threads) throw(std::invalid_argument, std::runtime_error);
     std::vector<ptrdiff_t> cluster(double* data, int dim0, int dim1) throw(std::invalid_argument, std::runtime_error);
 };

@@ -16,7 +16,7 @@
 
 #include <cmath>
 #include <cstdint>
-#include <hdf5.h>
+#include <cstddef>
 #include <iomanip>
 #include <omp.h>
 #include <stdexcept>
@@ -34,7 +34,6 @@
 #include "atomic.h"
 #include "constants.h"
 #include "dataset.h"
-#include "hdf5_util.h"
 #include "io.h"
 #include "rules.h"
 #include "spatial_index.h"
@@ -106,16 +105,16 @@ class HPDBSCAN {
         Cuts cuts = index.compute_cuts();
 
         // exchange the number of points in the halos
-        int send_counts[m_size];
-        int recv_counts[m_size];
+        std::vector<int> send_counts(m_size);
+        std::vector<int> recv_counts(m_size);
         for (size_t i = 0; i < cuts.size(); ++i) {
             send_counts[i] = static_cast<int>(cuts[i].second - cuts[i].first);
         }
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
         // accumulate the numbers of points from each node
-        int send_displs[m_size];
-        int recv_displs[m_size];
+    std::vector<int> send_displs(m_size);
+    std::vector<int> recv_displs(m_size);
         size_t total_items_to_receive = 0;
         for (int i = 0; i < m_size; ++i) {
             send_displs[i] = cuts[i].first;
@@ -126,11 +125,11 @@ class HPDBSCAN {
         // create a buffer for the incoming cluster labels and exchange them
         const size_t upper_halo_bound = index.upper_halo_bound();
         const size_t lower_halo_bound = index.lower_halo_bound();
-        Cluster halo_labels[total_items_to_receive];
+        std::vector<Cluster> halo_labels(total_items_to_receive);
 
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_LONG,
-            halo_labels, recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            clusters.data(), send_counts.data(), send_displs.data(), MPI_LONG,
+            halo_labels.data(), recv_counts.data(), recv_displs.data(), MPI_LONG, MPI_COMM_WORLD
         );
 
         // update the local clusters with the received information
@@ -157,16 +156,16 @@ class HPDBSCAN {
         const int number_of_rules = static_cast<int>(rules.size());
 
         // determine how many rules each rank will send
-        int send_counts[m_size];
-        int send_displs[m_size];
-        int recv_counts[m_size];
-        int recv_displs[m_size];
+        std::vector<int> send_counts(m_size);
+        std::vector<int> send_displs(m_size);
+        std::vector<int> recv_counts(m_size);
+        std::vector<int> recv_displs(m_size);
 
         for (int i = 0; i < m_size; ++i) {
             send_counts[i] = 2 * number_of_rules;
             send_displs[i] = 0;
         }
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
         // ... based on that calculate the displacements into the receive buffer
         size_t total = 0;
@@ -176,7 +175,7 @@ class HPDBSCAN {
         }
 
         // serialize the rules
-        Cluster serialized_rules[send_counts[m_rank]];
+        std::vector<Cluster> serialized_rules(send_counts[m_rank]);
         size_t index = 0;
         for (const auto& rule : rules) {
             serialized_rules[index++] = rule.first;
@@ -184,10 +183,10 @@ class HPDBSCAN {
         }
 
         // exchange the rules and update the own rules
-        Cluster incoming_rules[total];
+        std::vector<Cluster> incoming_rules(total);
         MPI_Alltoallv(
-            serialized_rules, send_counts, send_displs, MPI_LONG,
-            incoming_rules, recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            serialized_rules.data(), send_counts.data(), send_displs.data(), MPI_LONG,
+            incoming_rules.data(), recv_counts.data(), recv_displs.data(), MPI_LONG, MPI_COMM_WORLD
         );
         for (size_t i = 0; i < total; i += 2) {
             rules.update(incoming_rules[i], incoming_rules[i + 1]);
@@ -234,16 +233,16 @@ class HPDBSCAN {
         size_t metrics[] = {cluster_points, noise_points, core_points};
 
         #ifdef WITH_MPI
-        int number_of_unique_clusters = static_cast<int>(unique_clusters.size());
-        int set_counts[m_size];
-        int set_displs[m_size];
+    int number_of_unique_clusters = static_cast<int>(unique_clusters.size());
+    std::vector<int> set_counts(m_size);
+    std::vector<int> set_displs(m_size);
 
         if (m_rank == 0) {
         #endif
         std::cout << "Summary..." << std::endl;
         #ifdef WITH_MPI
         }
-        MPI_Gather(&number_of_unique_clusters, 1, MPI_INT, set_counts, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(&number_of_unique_clusters, 1, MPI_INT, set_counts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         // allocate the buffers for the serialized sets
         Clusters global_buffer;
@@ -263,7 +262,7 @@ class HPDBSCAN {
         // collect the individual unique clusters on the MPI root into a global buffer
         MPI_Gatherv(
             local_buffer.data(), number_of_unique_clusters, MPI_LONG,
-            global_buffer.data(), set_counts, set_displs, MPI_LONG, 0, MPI_COMM_WORLD
+            global_buffer.data(), set_counts.data(), set_displs.data(), MPI_LONG, 0, MPI_COMM_WORLD
         );
         // accumulate the metrics of each node
         MPI_Reduce(
@@ -297,62 +296,15 @@ public:
         }
     }
 
-    Clusters cluster(const std::string& path, const std::string& dataset) {
-        return cluster(path, dataset, omp_get_max_threads());
+    // Cluster data loaded from a CSV file (each row = point, columns = features)
+    Clusters cluster(const std::string& path) {
+        return cluster(path, omp_get_max_threads());
     }
 
-    Clusters cluster(const std::string& path, const std::string& dataset, int threads) {
-        // read in the data
-        Dataset data = IO::read_hdf5(path, dataset);
-
-        // determine which template to invoke
-        H5T_class_t type_class = H5Tget_class(data.m_type);
-        size_t precision = H5Tget_precision(data.m_type);
-
-        // integer
-        if (type_class == H5T_INTEGER) {
-            H5T_sign_t sign = H5Tget_sign(data.m_type);
-
-            // signed
-            if (sign == H5T_SGN_2) {
-                if (precision == 8) {
-                    return cluster<int8_t>(data, threads);
-                } else if (precision == 16) {
-                    return cluster<int16_t>(data, threads);
-                } else if (precision == 32) {
-                    return cluster<int32_t>(data, threads);
-                } else if (precision == 64) {
-                    return cluster<int64_t>(data, threads);
-                } else {
-                    throw std::invalid_argument("Unsupported signed integer precision");
-                }
-            // unsigned
-            } else {
-                if (precision == 8) {
-                    return cluster<uint8_t>(data, threads);
-                } else if (precision == 16) {
-                    return cluster<uint16_t>(data, threads);
-                } else if (precision == 32) {
-                    return cluster<uint32_t>(data, threads);
-                } else if (precision == 64) {
-                    return cluster<uint64_t>(data, threads);
-                } else {
-                    throw std::invalid_argument("Unsupported unsigned integer precision");
-                }
-            }
-        // floating point
-        } else if (type_class == H5T_FLOAT) {
-            if (precision == 32) {
-                return cluster<float>(data, threads);
-            } else if (precision == 64) {
-                return cluster<double>(data, threads);
-            } else {
-                throw std::invalid_argument("Unsupported floating point precision");
-            }
-        // unsupported type
-        } else {
-            throw std::invalid_argument("Unsupported data set type");
-        }
+    Clusters cluster(const std::string& path, int threads) {
+        // read CSV into a Dataset (double precision)
+        Dataset data = IO::read_csv(path);
+        return cluster<double>(data, threads);
     }
 
     template <typename T>
@@ -474,8 +426,8 @@ public:
 
     template <typename T>
     Clusters cluster(T* data, int dim0, int dim1, int threads) {
-        hsize_t chunk[2] = {static_cast<hsize_t>(dim0), static_cast<hsize_t>(dim1)};
-        Dataset dataset(data, chunk, HDF5_Types<T>::map());
+        size_t chunk[2] = {static_cast<size_t>(dim0), static_cast<size_t>(dim1)};
+        Dataset dataset(data, chunk, sizeof(T));
 
         return cluster<T>(dataset, threads);
     }

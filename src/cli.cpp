@@ -45,11 +45,13 @@ int main(int argc, char** argv) {
         ("m, minPoints", "density threshold", cxxopts::value<size_t>()->default_value("2"))
         ("e, epsilon", "spatial search radius", cxxopts::value<float>()->default_value("0.1"))
         ("t, threads", "utilized threads", cxxopts::value<int>()->default_value(std::to_string(omp_get_max_threads())))
-        ("i, input", "input file", cxxopts::value<std::string>()->default_value("data.h5"))
-        ("o, output", "output file", cxxopts::value<std::string>()->default_value("data.h5"))
+    ("i, input", "input file", cxxopts::value<std::string>()->default_value("data.csv"))
+    ("o, output", "output file", cxxopts::value<std::string>()->default_value("clusters.csv"))
         ("input-dataset", "input dataset name", cxxopts::value<std::string>()->default_value("DATA"))
         ("output-dataset", "output dataset name", cxxopts::value<std::string>()->default_value("CLUSTERS"))
     ;
+
+    // NOTE: input must be provided via -i/--input (do not accept positional args)
 
     // parse the command-line arguments
     cxxopts::ParseResult arguments = [&]() {
@@ -85,7 +87,6 @@ int main(int argc, char** argv) {
         HPDBSCAN hpdbscan(arguments["epsilon"].as<float>(), arguments["minPoints"].as<size_t>());
         clusters = hpdbscan.cluster(
             arguments["input"].as<std::string>(),
-            arguments["input-dataset"].as<std::string>(),
             arguments["threads"].as<int>()
         );
     } catch (cxxopts::OptionParseException& e) {
@@ -109,7 +110,7 @@ int main(int argc, char** argv) {
     }
 
     try {
-        IO::write_hdf5(arguments["output"].as<std::string>(), arguments["output-dataset"].as<std::string>(), clusters);
+    IO::write_csv(arguments["output"].as<std::string>(), clusters);
     } catch (cxxopts::OptionParseException& e) {
         # ifdef WITH_MPI
         if (rank == 0) {

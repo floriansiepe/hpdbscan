@@ -28,9 +28,19 @@ TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_OUTPUT)
 ## mpi, optional for distributed computing
 FIND_PACKAGE(MPI)
 IF(MPI_FOUND)
-    SET(CMAKE_CXX_COMPILER "${MPI_CXX_COMPILER}")
     TARGET_COMPILE_DEFINITIONS(hpdbscan PRIVATE WITH_MPI)
     TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_MPI)
+    # Link against the imported MPI C++ target so include paths and libs are
+    # propagated to the targets when using an explicit compiler (do not override
+    # the user's CMAKE_CXX_COMPILER).
+    if (TARGET MPI::MPI_CXX)
+        target_link_libraries(hpdbscan PRIVATE MPI::MPI_CXX)
+        target_link_libraries(hpdbscan-bin PRIVATE MPI::MPI_CXX)
+    else()
+        # fallback to the C target if CXX target is not available
+        target_link_libraries(hpdbscan PRIVATE MPI::MPI_C)
+        target_link_libraries(hpdbscan-bin PRIVATE MPI::MPI_C)
+    endif()
 ELSE()
     MESSAGE("BUILDING WITHOUT MPI SUPPORT")
 ENDIF()
@@ -42,10 +52,7 @@ TARGET_COMPILE_OPTIONS(hpdbscan PRIVATE ${OpenMP_CXX_FLAGS})
 TARGET_LINK_LIBRARIES(hpdbscan-bin PRIVATE ${OpenMP_CXX_FLAGS})
 TARGET_COMPILE_OPTIONS(hpdbscan-bin PRIVATE ${OpenMP_CXX_FLAGS})
 
-## hdf5
-FIND_PACKAGE(HDF5 1.8.10 REQUIRED)
-TARGET_INCLUDE_DIRECTORIES(hpdbscan-bin PRIVATE "${HDF5_INCLUDE_DIRS}")
-TARGET_LINK_LIBRARIES(hpdbscan-bin PRIVATE "${HDF5_LIBRARIES}")
+## no HDF5: using CSV input/output
 
 ## swig and python detection for optional bindings
 FIND_PACKAGE(SWIG)
@@ -73,8 +80,7 @@ IF(SWIG_FOUND)
                 TARGET_INCLUDE_DIRECTORIES(hpdbscan-binding PRIVATE ${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE_DIRS})
                 TARGET_LINK_LIBRARIES(hpdbscan-binding PRIVATE ${OpenMP_CXX_FLAGS})
                 TARGET_COMPILE_OPTIONS(hpdbscan-binding PRIVATE ${OpenMP_CXX_FLAGS})
-                TARGET_INCLUDE_DIRECTORIES(hpdbscan-binding PRIVATE "${HDF5_INCLUDE_DIRS}")
-                TARGET_LINK_LIBRARIES(hpdbscan-binding PRIVATE "${HDF5_LIBRARIES}")
+                # No HDF5 for bindings in CSV-only mode
                 
                 # rename the library
                 SET_TARGET_PROPERTIES(hpdbscan-binding PROPERTIES PREFIX "" OUTPUT_NAME _hpdbscan)

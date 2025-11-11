@@ -42,4 +42,10 @@ SPECIALIZE_MPI_TYPE(int64_t, MPI_INT64_T);
 SPECIALIZE_MPI_TYPE(float,  MPI_FLOAT);
 SPECIALIZE_MPI_TYPE(double, MPI_DOUBLE);
 
+// additional common aliases used in the codebase
+// size_t maps to MPI_UNSIGNED_LONG on typical Unix systems
+SPECIALIZE_MPI_TYPE(size_t, MPI_UNSIGNED_LONG);
+// Cluster is typedef'd to long on some platforms; map to MPI_LONG
+SPECIALIZE_MPI_TYPE(long, MPI_LONG);
+
 #endif // MPI_UTIL_H
