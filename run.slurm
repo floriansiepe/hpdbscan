@@ -30,13 +30,12 @@
 DATASET="$1"
 EPS="$2"
 MINPTS="$3"
-NUM_PARTITIONS="$4"
 EXP_DIR="$5"
 # optional: explicit output path
 OUT_PATH="$6"
 
-if [ -z "$DATASET" ] || [ -z "$EPS" ] || [ -z "$MINPTS" ] || [ -z "$NUM_PARTITIONS" ] || [ -z "$EXP_DIR" ]; then
-  echo "Usage: sbatch run.slurm <dataset> <eps> <minPts> <num_partitions> <exp_dir> [out] [cpus_per_task]"
+if [ -z "$DATASET" ] || [ -z "$EPS" ] || [ -z "$MINPTS" ] || [ -z "$EXP_DIR" ]; then
+  echo "Usage: sbatch run.slurm <dataset> <eps> <minPts> <exp_dir> [out] [cpus_per_task]"
   exit 1
 fi
 
@@ -48,7 +47,6 @@ fi
 echo "Starting HPDBSCAN job"
 echo "Job id: $SLURM_JOB_ID"
 echo "Nodes: $SLURM_JOB_NODELIST"
-echo "Requested ranks: $NUM_PARTITIONS"
 echo "Dataset: $DATASET"
 echo "Eps: $EPS  MinPts: $MINPTS"
 
