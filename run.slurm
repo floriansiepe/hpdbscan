@@ -5,7 +5,7 @@
 # SBATCH default; override at submission time with --cpus-per-task
 #SBATCH --cpus-per-task=32
 #SBATCH --output=hpdbscan_output_%j.txt
-#SBATCH --time=05:00:00
+#SBATCH --time=01:00:00
 #SBATCH --mail-user=siepef@uni-marburg.de
 #SBATCH --mail-type=END
 #SBATCH --mem=128G
@@ -59,10 +59,12 @@ module load openmpi4
 # Prepare a per-job scratch output file (so the compute nodes write to shared scratch)
 # Default scratch base directory can be overridden by setting SCRATCH_BASE in the environment
 SCRATCH_BASE="${SCRATCH_BASE:-/scratch_shared/siepef}"
-SCRATCH_FILE="$SCRATCH_BASE/scratch-HPDBSCAN-${SLURM_JOB_ID}"
+SCRATCH_DIR="$SCRATCH_BASE/scratch-HPDBSCAN-${SLURM_JOB_ID}"
+mkdir -p "$SCRATCH_DIR"
+SCRATCH_FILE="$SCRATCH_DIR/hpdbscan_job_${SLURM_JOB_ID}_output"
 
 # Determine output file: prefer explicit OUT_PATH, otherwise write to per-job scratch
-OUTFILE="${OUT_PATH:-$SCRATCH_FILE}"
+OUTFILE="${OUT_PATH:-$SCRATCH_DIR/hpdbscan_job_${SLURM_JOB_ID}_labels}"
 
 
 # Determine threads to pass to the binary (use SLURM_CPUS_PER_TASK if available,
