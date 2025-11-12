@@ -30,9 +30,9 @@
 DATASET="$1"
 EPS="$2"
 MINPTS="$3"
-EXP_DIR="$5"
+EXP_DIR="$4"
 # optional: explicit output path
-OUT_PATH="$6"
+OUT_PATH="$5"
 
 if [ -z "$DATASET" ] || [ -z "$EPS" ] || [ -z "$MINPTS" ] || [ -z "$EXP_DIR" ]; then
   echo "Usage: sbatch run.slurm <dataset> <eps> <minPts> <exp_dir> [out] [cpus_per_task]"
