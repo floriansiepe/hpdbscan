@@ -1,6 +1,10 @@
 # HPDBSCAN
 
-Highly parallel DBSCAN (HPDBSCAN) is a shared- and distributed-memory parallel implementation of the Density-Based Spatial Clustering for Applications with Noise (DBSCAN) algorithm. It is written in C++ and may be used as shared library and command line tool.  
+Highly parallel DBSCAN (HPDBSCAN) is a shared- and distributed-memory parallel implementation of the Density-Based Spatial Clustering for Applications with Noise (DBSCAN) algorithm. It is written in C++ and may be used as shared library and command line tool.
+
+> Markus Götz, Christian Bodenstein, and Morris Riedel. 2015. HPDBSCAN: highly parallel DBSCAN. In Proceedings of the Workshop on Machine Learning in High-Performance Computing Environments (MLHPC '15). Association for Computing Machinery, New York, NY, USA, Article 2, 1–10. https://doi.org/10.1145/2834892.2834894
+
+The code has been adapted to use CSV files instead of HDF5 files.
 
 ## Dependencies
 
@@ -9,7 +13,6 @@ HPDBSCAN requires the following dependencies. Please make sure, that these are i
 * CMake 3.10+
 * C++11 compliant compiler (e.g. g++ 4.9+)
 * OpenMP 4.0+ (e.g. g++ 4.9+)
-* HDF5 1.8+
 * (optional) Message Passing Interface (MPI) 2.0+
 * (optional) SWIG 3.0+ (Python bindings with and without MPI support)
 * (optional) Python 3.5+ (Python bindings with and without MPI support, requires headers)

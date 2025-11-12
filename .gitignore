@@ -1,0 +1,59 @@
+# Build artifacts
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+
+# Compiled binaries
+/*.o
+/*.obj
+/*.so
+/*.a
+/*.dll
+/output
+/hpdbscan
+/hpdbscan-bin
+
+# Editor and OS files
+*.swp
+*~
+.DS_Store
+.vscode/
+.idea/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Logs and scratch
+*.log
+/scratch-*
+hpdbscan_output_*.txt
+mu-dbscan_output_*.txt
+
+# Slurm
+*.out
+*.err
+slurm-*
+
+# Python virtual envs
+venv/
+.env/
+.envrc
+
+# Coverage / test artifacts
+.coverage
+htmlcov/
+
+# SWIG generated files
+*hpdbscan_wrap.*
+
+# Misc
+*.bak
+*.backup
+
+# Benchmarks / datasets (ignore large downloaded datasets by default)
+benchmarks/data/
+benchmarks/*.h5
