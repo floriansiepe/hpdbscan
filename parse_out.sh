@@ -18,6 +18,10 @@ ALG_NAME=${4:-}
 EPS=${5:-}
 MINPTS=${6:-}
 
+# Remove file extension from dataset name if present
+DATASET_BASE_NAME="${DATASET_NAME%%.*}"
+
+
 if [ ! -f "$LOGFILE" ]; then
     echo "Log file not found: $LOGFILE" >&2
     exit 2
@@ -26,8 +30,8 @@ fi
 mkdir -p "$EXPDIR"
 
 # Target directory: <exp_dir>/<dataset>/<algo>/<eps>_<minPts>/metrics.json
-if [ -n "$DATASET_NAME" ] && [ -n "$ALG_NAME" ] && [ -n "$EPS" ] && [ -n "$MINPTS" ]; then
-    TARGET_DIR="$EXPDIR/$DATASET_NAME/$ALG_NAME/${EPS}_${MINPTS}"
+if [ -n "$DATASET_BASE_NAME" ] && [ -n "$ALG_NAME" ] && [ -n "$EPS" ] && [ -n "$MINPTS" ]; then
+    TARGET_DIR="$EXPDIR/$DATASET_BASE_NAME/$ALG_NAME/${EPS}_${MINPTS}"
 else
     # fallback to writing directly into expdir
     TARGET_DIR="$EXPDIR"
