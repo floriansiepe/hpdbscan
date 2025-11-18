@@ -3,7 +3,7 @@
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
 # SBATCH default; override at submission time with --cpus-per-task
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=16
 #SBATCH --output=hpdbscan_output_%j.txt
 #SBATCH --time=05:00:00
 #SBATCH --mail-user=siepef@uni-marburg.de
@@ -78,6 +78,10 @@ echo "Setting OMP_NUM_THREADS=$OMP_NUM_THREADS"
 
 # Run using srun (preferred on Slurm). Adjust --mpi or replace with mpirun if required.
 # Pass --cpus-per-task to allocate the requested local hardware for each MPI rank
+# Force use of TCP transport to avoid UCX/PML mismatch issues
+export OMPI_MCA_pml=ob1
+export OMPI_MCA_btl=self,tcp
+
 # Print command for logging/debugging
 echo "Running hpdbscan with srun:"
 echo "srun --mpi=pmix --nodes=$SLURM_NNODES --ntasks=$SLURM_NTASKS --cpus-per-task=$THREADS ./build/hpdbscan -i \"$DATASET\" -e \"$EPS\" -m \"$MINPTS\" -t \"$THREADS\" -o \"$OUTFILE\" > \"$SCRATCH_FILE\""
