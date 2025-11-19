@@ -52,6 +52,7 @@ echo "Eps: $EPS  MinPts: $MINPTS"
 
 
 module purge
+module load ucx
 module load mpich
 
 # Prepare a per-job scratch output file (so the compute nodes write to shared scratch)
