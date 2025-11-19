@@ -52,7 +52,7 @@ echo "Eps: $EPS  MinPts: $MINPTS"
 
 
 module purge
-module load openmpi4
+module load mpich
 
 # Prepare a per-job scratch output file (so the compute nodes write to shared scratch)
 # Default scratch base directory can be overridden by setting SCRATCH_BASE in the environment
@@ -76,11 +76,10 @@ export OMP_PROC_BIND=spread
 
 echo "Setting OMP_NUM_THREADS=$OMP_NUM_THREADS"
 
-# Run using srun (preferred on Slurm). Adjust --mpi or replace with mpirun if required.
+# Run using srun (preferred on Slurm). The --mpi=pmix flag is compatible with
+# modern MPICH versions. By removing the OMPI_MCA_... variables, the MPI
+# implementation is free to choose the fastest available interconnect (e.g. Infiniband).
 # Pass --cpus-per-task to allocate the requested local hardware for each MPI rank
-# Force use of TCP transport to avoid UCX/PML mismatch issues
-export OMPI_MCA_pml=ob1
-export OMPI_MCA_btl=self,tcp
 
 # Print command for logging/debugging
 echo "Running hpdbscan with srun:"
