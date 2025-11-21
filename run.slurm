@@ -52,8 +52,9 @@ echo "Eps: $EPS  MinPts: $MINPTS"
 
 
 module purge
-module load gnu9/9.4.0
-module load mpich/3.4.2-ucx
+module load gnu12
+module load ucx
+module load openmpi4
 
 # Prepare a per-job scratch output file (so the compute nodes write to shared scratch)
 # Default scratch base directory can be overridden by setting SCRATCH_BASE in the environment
