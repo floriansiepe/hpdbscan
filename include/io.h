@@ -130,7 +130,7 @@ public:
         dataset.m_p = local_buf;
         dataset.m_chunk[0] = local_rows;
         dataset.m_chunk[1] = cols;
-        dataset.m_offset[0] = displs[rank] / cols;
+        dataset.m_offset[0] = 0; // handled by Dataset constructor flow if needed
         #else
         // single process: chunk == shape
         dataset.m_chunk[0] = static_cast<size_t>(shape[0]);
