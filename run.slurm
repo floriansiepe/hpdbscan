@@ -2,10 +2,11 @@
 #SBATCH --job-name=HPDBSCANJob
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
+#SBATCH --ntasks-per-node=1
 # SBATCH default; override at submission time with --cpus-per-task
 #SBATCH --cpus-per-task=16
 #SBATCH --output=hpdbscan_output_%j.txt
-#SBATCH --time=05:00:00
+#SBATCH --time=01:00:00
 #SBATCH --mail-user=siepef@uni-marburg.de
 #SBATCH --mail-type=END
 #SBATCH --mem=128G
