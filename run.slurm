@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=HPDBSCANJob
 #SBATCH --nodes=4
-#SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=1
 # SBATCH default; override at submission time with --cpus-per-task
 #SBATCH --cpus-per-task=16

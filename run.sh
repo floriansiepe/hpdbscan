@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Get dataset, eps, minPts, num_partitions and exp_dir from command line arguments
 DATASET=${1}
-EPS=${3}
-MINPTS=${4}
-EXP_DIR=${6}
+EPS=${2}
+MINPTS=${3}
+EXP_DIR=${4}
 
 
 # Check if required arguments are provided
