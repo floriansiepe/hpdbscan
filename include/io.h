@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <fstream>
+#include <cstdlib>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -131,10 +132,19 @@ public:
         dataset.m_chunk[0] = local_rows;
         dataset.m_chunk[1] = cols;
         dataset.m_offset[0] = 0; // handled by Dataset constructor flow if needed
+
+        // Count points that actually traverse the network during partitioning.
+        // Root keeps its local chunk; all other rows are sent to remote ranks.
+        size_t root_local_rows = base + (rem > 0 ? 1 : 0);
+        dataset.m_exchanged_partitioning_points = rows - root_local_rows;
+
+        // make the global counter visible on all ranks for consistent reporting
+        MPI_Bcast(&dataset.m_exchanged_partitioning_points, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
         #else
         // single process: chunk == shape
         dataset.m_chunk[0] = static_cast<size_t>(shape[0]);
         dataset.m_chunk[1] = static_cast<size_t>(shape[1]);
+        dataset.m_exchanged_partitioning_points = 0;
         #endif
 
         return dataset;

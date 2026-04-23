@@ -41,6 +41,8 @@ mkdir -p "$TARGET_DIR"
 METRICS_FILE="$TARGET_DIR/metrics.json"
 
 total_time=""
+exchanged_partitioning_points=""
+exchanged_merging_edges=""
 declare -a step_json
 declare -a summary_json
 declare -a step_times
@@ -75,6 +77,14 @@ while IFS= read -r line; do
         summary_json+=("\"core_points\": ${BASH_REMATCH[1]}")
     fi
 done < <(grep -E "^(\s*)(Clusters|Cluster points|Noise points|Core points):" "$LOGFILE" || true)
+
+# Extract communication counters
+if grep -qE "^[[:space:]]*Exchanged partitioning points:" "$LOGFILE"; then
+    exchanged_partitioning_points=$(grep -E "^[[:space:]]*Exchanged partitioning points:" "$LOGFILE" | tail -n1 | sed -E 's/[^0-9]*([0-9]+).*/\1/')
+fi
+if grep -qE "^[[:space:]]*Exchanged merging edges:" "$LOGFILE"; then
+    exchanged_merging_edges=$(grep -E "^[[:space:]]*Exchanged merging edges:" "$LOGFILE" | tail -n1 | sed -E 's/[^0-9]*([0-9]+).*/\1/')
+fi
 
 # If no total_time, try summing step_times
 if [ -z "$total_time" ] && [ ${#step_times[@]} -gt 0 ]; then
@@ -121,6 +131,20 @@ fi
         echo "    \"datasetName\": \"$DATASET_NAME\""
     else
         echo '    "datasetName": null'
+    fi
+    echo '  },'
+
+    # additionalMetrics
+    echo '  "additionalMetrics": {'
+    if [ -n "$exchanged_partitioning_points" ]; then
+        echo "    \"exchangedPartitioningPoints\": $exchanged_partitioning_points,"
+    else
+        echo '    "exchangedPartitioningPoints": null,'
+    fi
+    if [ -n "$exchanged_merging_edges" ]; then
+        echo "    \"exchangedMergingEdges\": $exchanged_merging_edges"
+    else
+        echo '    "exchangedMergingEdges": null'
     fi
     echo '  }'
 

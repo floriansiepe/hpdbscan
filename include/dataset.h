@@ -35,6 +35,8 @@ struct Dataset {
     size_t m_element_size;
     // raw pointer to the data buffer
     void* m_p;
+    // global count of points exchanged during partitioning/distribution
+    size_t m_exchanged_partitioning_points = 0;
 
     // construct an empty dataset given shape and element size
     Dataset(const size_t shape[2], size_t element_size) {

@@ -45,6 +45,8 @@ class HPDBSCAN {
     #ifdef WITH_MPI
     int m_rank;
     int m_size;
+    size_t m_exchanged_partitioning_points;
+    size_t m_exchanged_merging_edges;
     #endif
 
     template <typename T>
@@ -191,6 +193,14 @@ class HPDBSCAN {
         for (size_t i = 0; i < total; i += 2) {
             rules.update(incoming_rules[i], incoming_rules[i + 1]);
         }
+
+        // Each rank sends its local rule edges to all remote ranks.
+        const size_t local_edges_sent = static_cast<size_t>(number_of_rules) * static_cast<size_t>(m_size > 0 ? (m_size - 1) : 0);
+        size_t global_edges_sent = 0;
+        MPI_Reduce(&local_edges_sent, &global_edges_sent, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (m_rank == 0) {
+            m_exchanged_merging_edges = global_edges_sent;
+        }
     }
     #endif
 
@@ -278,6 +288,12 @@ class HPDBSCAN {
                   << "\tNoise points:   " << metrics[1] << std::endl
                   << "\tCore points:    " << metrics[2] << std::endl;
         #ifdef WITH_MPI
+        if (m_rank == 0) {
+            std::cout << "\tExchanged partitioning points: " << m_exchanged_partitioning_points << std::endl
+                      << "\tExchanged merging edges:       " << m_exchanged_merging_edges << std::endl;
+        }
+        #endif
+        #ifdef WITH_MPI
         }
         #endif
     }
@@ -288,6 +304,8 @@ public:
         #ifdef WITH_MPI
         MPI_Comm_rank(MPI_COMM_WORLD, &m_rank);
         MPI_Comm_size(MPI_COMM_WORLD, &m_size);
+        m_exchanged_partitioning_points = 0;
+        m_exchanged_merging_edges = 0;
         #endif
 
         // sanitize values
@@ -311,6 +329,10 @@ public:
     Clusters cluster(Dataset& dataset, int threads=omp_get_max_threads()) {
         #ifdef WITH_OUTPUT
         double execution_start = omp_get_wtime();
+        #endif
+        #ifdef WITH_MPI
+        m_exchanged_partitioning_points = dataset.m_exchanged_partitioning_points;
+        m_exchanged_merging_edges = 0;
         #endif
         // set the number of threads
         omp_set_num_threads(threads);
