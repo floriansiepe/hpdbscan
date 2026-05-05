@@ -6,6 +6,7 @@ EPS=${3}
 MINPTS=${4}
 EXP_DIR=${5}
 
+echo "Running HPDBSCAN with dataset=$DATASET dim=$DIM eps=$EPS minPts=$MINPTS exp_dir=$EXP_DIR"
 
 # Check if required arguments are provided
 if [ -z "$DATASET" ] || [ -z "$EPS" ] || [ -z "$MINPTS" ] || [ -z "$EXP_DIR" ]; then
